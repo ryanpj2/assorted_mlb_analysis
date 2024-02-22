@@ -1,0 +1,68 @@
+---
+title: "Simple Linear Regression and Run Differential"
+author: "Ryan Jung"
+date: "2/03/2023"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(Lahman)
+library(broom)
+```
+
+
+**Summary:** In these examples I fit two simple linear regression models to demonstrate baseball is a game of offense, pitching, and defense. Data is from the Lahman database, which contains statistics for Major League Baseball from 1871 through 2021. 
+
+First, I fit a model with RD as the response and OPS, WHIP, and FP as our explanatory variables. Prior to that, I have to create some variables that are not explicitly included in the Lahman database, namely rate stats such as OBP and SLG. 
+
+```{r}
+dat <- Teams %>%
+  select(yearID, franchID, G, W, L, AB, H, X2B, X3B, HR, BB, HBP, SF,HA, HRA,
+         BBA, SOA, IPouts, FP, R, RA) %>%
+  filter(yearID >= 1900) %>%
+  replace_na(list(HBP = 0, SF = 0)) %>%
+  mutate(X1B = H - (X2B + X3B + HR)) %>%
+  mutate(OBP = (H + BB + HBP)/(AB + BB + HBP + SF)) %>%
+  mutate(SLG = (X1B + 2*X2B + 3*X3B + 4*HR)/AB) %>%
+  mutate(OPS = OBP + SLG) %>%
+  mutate(WHIP = 3*(HA + BBA)/IPouts) %>% 
+  mutate(RD = (R - RA)/G)
+```
+
+```{r}
+m <- lm(RD ~ OPS + WHIP + FP, data = dat)
+summary(m)
+```
+
+```{r}
+par(mfrow = c (2,2))
+plot(m, add.smooth = FALSE)
+```
+The model performs reasonably well, and doesn't have any glaring issues.
+
+
+This model can be improved through a principled rescaling of OPS, WHIP, and FP. To do this, I first have to create league average variables for each season, then use those league averages to scale each individual team's performance.
+
+
+```{r}
+scaled = dat %>% 
+  group_by(yearID) %>% 
+  mutate(avgOBP = sum(H + BB + HBP)/sum(AB + BB + HBP + SF)) %>% 
+  mutate(avgSLG = sum(X1B + 2*X2B + 3*X3B + 4*HR)/sum(AB)) %>%  
+  mutate(avgOPS = avgOBP + avgSLG) %>% 
+  mutate(avgWHIP = 3*sum(HA + BBA)/sum(IPouts)) %>% 
+  mutate(OPSscaled = OPS/avgOPS) %>% 
+  mutate(WHIPscaled = avgWHIP/WHIP) %>% 
+  mutate(FPscaled = mean(FP)/FP)
+
+m3 = lm(RD ~ OPSscaled + WHIPscaled + FPscaled, data = scaled)
+summary(m3)
+```
+
+This model performs much better because of different league environments. Some eras of baseball had more or less run scoring than others, so predicting RD based on raw rate stats over the history of baseball can over/underestimate run differential depending on the balance between pitching and hitting in any given season. Additionally, by scaling each team's performance by the league average, we gain context about how a team performed relative to other teams in the same season. 
