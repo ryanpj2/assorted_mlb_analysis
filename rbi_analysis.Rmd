@@ -1,0 +1,54 @@
+---
+title: "rbi_analysis"
+output: html_document
+date: "2024-02-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+player_stats = read_csv("data/HR-RBI-AVG-SLG.csv")
+ab_runners_on = read_csv("data/ab-w-runnerson.csv")
+
+ab = ab_runners_on %>% 
+  select(Season, Name, AB) 
+
+stats = player_stats %>% 
+  select(PlayerId, Season, Name, PA:SLG) %>% 
+  inner_join(ab, by = c("Season", "Name"))
+
+```
+
+```{r}
+#linear model of RBI
+m1 = lm(RBI ~ HR + AVG + SLG + AB, data = stats)
+summary(m1)
+```
+
+```{r}
+stats_w_expected = stats %>% 
+  cbind(expected_rbi = m1$fitted.values)
+
+stats_w_expected %>% 
+  ggplot(aes(x=RBI, y=expected_rbi)) +
+  geom_point() +
+  geom_abline(color = "red", size = 1) +
+  labs(x = "RBI", y = "Expected RBI")
+```
+
+
+```{r}
+#aggregate seasons
+stats %>% 
+  group_by(Name) %>% 
+  summarise(HR = sum(HR), avg = sum(PA*AVG)/sum(PA), slg = sum(PA*SLG)/sum(PA), RBI = sum(RBI))
+```
+
+  
+  
