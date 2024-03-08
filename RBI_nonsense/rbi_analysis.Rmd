@@ -1,11 +1,17 @@
 ---
 title: "rbi_analysis"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 date: "2024-02-29"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
 ```
 
 ```{r}
@@ -17,7 +23,7 @@ player_stats = read_csv("data/HR-RBI-AVG-SLG.csv")
 ab_runners_on = read_csv("data/ab-w-runnerson.csv")
 
 ab = ab_runners_on %>% 
-  select(Season, Name, AB) 
+  select(Season, Name, ABwROB = AB) 
 
 stats = player_stats %>% 
   select(PlayerId, Season, Name, PA:SLG) %>% 
@@ -27,27 +33,36 @@ stats = player_stats %>%
 
 ```{r}
 #linear model of RBI
-m1 = lm(RBI ~ HR + AVG + SLG + AB, data = stats)
+m1 = lm(RBI ~ HR + AVG + SLG + ABwROB, data = stats)
 summary(m1)
 ```
 
 ```{r}
 stats_w_expected = stats %>% 
-  cbind(expected_rbi = m1$fitted.values)
+  cbind(predicted_rbi = m1$fitted.values)
 
 stats_w_expected %>% 
-  ggplot(aes(x=RBI, y=expected_rbi)) +
-  geom_point() +
-  geom_abline(color = "red", size = 1) +
-  labs(x = "RBI", y = "Expected RBI")
+  ggplot(aes(x=predicted_rbi, y=RBI), ) +
+  geom_point(color = "blue", size = 1) +
+  geom_abline(color = "black", linetype = "dashed", size = 0.5) +
+  labs(x = "RBI", y = "Predicted RBI",
+       title = "Predicted RBI vs Actual 2015-2023",
+       subtitle = "All Player Seasons with > 200 PA")
 ```
 
 
 ```{r}
 #aggregate seasons
-stats %>% 
+rbi_vs_expected = stats_w_expected %>% 
   group_by(Name) %>% 
-  summarise(HR = sum(HR), avg = sum(PA*AVG)/sum(PA), slg = sum(PA*SLG)/sum(PA), RBI = sum(RBI))
+  summarise(HR = sum(HR), AVG = sum(PA*AVG)/sum(PA), SLG = sum(PA*SLG)/sum(PA),
+            ABwROB = first(ABwROB), RBI = sum(RBI), predicted_RBI = round(sum(predicted_rbi), 1)) %>%
+  mutate(Difference = RBI - predicted_RBI) %>%
+  select(Name:SLG, ABwROB, RBI:Difference) %>% 
+  mutate(across(c("AVG", "SLG"), round, 3)) %>%
+  arrange(Difference)
+
+knitr::kable(rbi_vs_expected[1:30,])
 ```
 
   
